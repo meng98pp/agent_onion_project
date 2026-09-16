@@ -3,6 +3,19 @@
 - Chunk 与 ToolResult 的 Python 定义见 `src/common/types.py`
 - 领域模块只依赖这些类型，不依赖对方的私有类
 
+## Block（parse_* 产出，chunk_* 只消费这个结构）
+
+```json
+{
+  "block_type": "text|table|title",
+  "content": "string",
+  "page_num": 1,
+  "section_path": ["第三章 管理层讨论", "一、经营情况概述"],
+  "source": "demo.txt",
+  "is_ocr": false
+}
+```
+
 ## Chunk
 
 ```json
@@ -13,7 +26,10 @@
   "page_num": 1,
   "section_path": "string",
   "strategy": "fixed|semantic|hierarchical",
-  "parent_id": null
+  "parent_id": null,
+  "block_types": ["text"],
+  "stock_code": "600000",
+  "year": "2023"
 }
 ```
 
