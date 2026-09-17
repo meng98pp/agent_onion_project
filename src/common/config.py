@@ -1,6 +1,10 @@
 import os
 import sys
 
+# FAISS(MKL) 与 PyTorch/sentence-transformers 常各带一份 OpenMP，Windows 上会触发 OMP Error #15。
+# 须在加载 faiss/torch 之前设置；仅开发兼容，非官方长期方案。
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
 # `python src/common/config.py` 会把本目录插到 sys.path[0]，
 # 导致本地 types.py 遮蔽标准库 types（GenericAlias 循环导入）。
 _this_dir = os.path.abspath(os.path.dirname(__file__))
@@ -42,6 +46,21 @@ SCORE_THRESHOLD = 0.25
 DEFAULT_STRATEGY = "semantic"
 LLM_TIMEOUT_SEC = 60.0
 EMBED_TIMEOUT_SEC = 60.0
+
+# V3：混合检索 / RRF / Rerank / 评估
+RRF_K = 60
+RETRIEVE_TOP_N = int(os.getenv("RETRIEVE_TOP_N", "10"))
+RERANK_TOP_K = int(os.getenv("RERANK_TOP_K", "3"))
+MODELS_DIR = ROOT / "models"
+# 本地 CrossEncoder：默认 models/bge-reranker-base（可用 RERANK_MODEL 覆盖目录名或绝对路径）
+_RERANK_MODEL_ENV = os.getenv("RERANK_MODEL", "bge-small-zh-v1.5")
+_rerank_path = Path(_RERANK_MODEL_ENV)
+RERANK_MODEL_PATH = (
+    _rerank_path if _rerank_path.is_absolute() else MODELS_DIR / _RERANK_MODEL_ENV
+)
+EVALUATION_DIR = ROOT / "evaluation"
+EVAL_GOLD_PATH = EVALUATION_DIR / "gold_qa.json"
+EVAL_RESULTS_DIR = EVALUATION_DIR / "results"
 
 
 def missing_required_keys() -> list[str]:

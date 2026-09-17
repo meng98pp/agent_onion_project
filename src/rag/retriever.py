@@ -47,4 +47,5 @@ def search(
         hit = dict(meta_list[idx])
         hit["score"] = float(score)
         hits.append(hit)
+    print("=============================")
     return hits

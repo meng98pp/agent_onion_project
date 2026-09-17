@@ -1,6 +1,6 @@
 # FinAgent Onion Learning
 
-单仓叠加的金融分析 Agent 学习工程。当前版本：**V2 最小 RAG**。
+单仓叠加的金融分析 Agent 学习工程。当前版本：**V3 混合检索 + RRF + Rerank + 评估**。
 
 ## 环境
 
@@ -43,9 +43,28 @@ python src\rag\ask.py "不存在的公司XYZ的营收"
 - `vectorstore/faiss_index.bin`：FAISS `IndexFlatIP`
 - `vectorstore/faiss_meta.json`：与向量行对齐的 chunk 元数据
 
+## V3 运行
+
+同一问题可切换 `vector_only` / `hybrid` / `hybrid_rerank`；评估默认 Hit@K，可选 RAGAS。
+
+`hybrid_rerank` 使用本地 CrossEncoder：`models/bge-reranker-base/`（与 `models/bge-small-zh-v1.5` 不同；缺模型时自动跳过精排）。可用环境变量 `RERANK_MODEL` 覆盖目录名或绝对路径。
+
+```powershell
+python src\rag\ask.py --mode hybrid --q "贵州茅台2023年营业收入？"
+python src\rag\ask.py --mode hybrid_rerank --q "贵州茅台2023年营业收入？"
+python src\rag\evaluate_ragas.py
+python src\rag\evaluate_ragas.py --ablation vector_only,hybrid,hybrid_rerank
+python src\rag\evaluate_ragas.py --ragas   # 需已装 ragas/datasets，会额外调 LLM
+```
+
+产物：
+
+- `evaluation/gold_qa.json`：金标题
+- `evaluation/results/*.json`：Hit@K / 消融（及可选 RAGAS）结果
+
 ## 测试
 
 ```powershell
-pytest tests\ingest\test_chunking.py tests\rag\test_retriever.py -q
+pytest tests\ingest\test_chunking.py tests\rag\test_retriever.py tests\rag\test_rrf.py -q
 python -c "import json,glob; [print(p,len(json.load(open(p,encoding='utf-8')))) for p in glob.glob('data/chunks/*.json')]"
 ```
