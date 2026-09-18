@@ -29,6 +29,65 @@ def is_noise_line(line: str) -> bool:
     return any(pattern.match(line) for pattern in NOISE_PATTERNS)
 
 
+def _is_label_only_row(row: list[str]) -> bool:
+    """仅首列有字、其余空：常见于单元格内换行被拆成多行。"""
+    if not row or not str(row[0]).strip():
+        return False
+    return all(not str(c).strip() for c in row[1:])
+
+
+def _is_value_continuation_row(row: list[str]) -> bool:
+    """首列空、后列有数：换行标签对应的数值行。
+
+    两列表只需 1 个数值格；更宽的表要求后列「至少半数」非空，避免误吞空行。
+    """
+    if not row or str(row[0]).strip():
+        return False
+    rest = row[1:]
+    if not rest:
+        return False
+    nonempty = sum(1 for c in rest if str(c).strip())
+    need = 1 if len(rest) <= 2 else max(2, (len(rest) + 1) // 2)
+    return nonempty >= need
+
+
+def _merge_wrapped_table_rows(rows: list[list[str]]) -> list[list[str]]:
+    """合并 pdfplumber 因单元格换行拆出的标签行与数值行。
+
+    典型模式：
+      | 归属于上市公司股东的扣除非经常 |  |  |  |
+      |  | 23,327... | 19,994... | 16.67% |
+      | 性损益的净利润（元） |  |  |  |
+    → 一行完整指标 + 数值。
+    """
+    if not rows:
+        return rows
+    merged: list[list[str]] = []
+    i = 0
+    while i < len(rows):
+        row = list(rows[i])
+        if (
+            _is_label_only_row(row)
+            and i + 1 < len(rows)
+            and _is_value_continuation_row(rows[i + 1])
+        ):
+            label = str(row[0]).strip()
+            values = list(rows[i + 1])
+            consumed = 2
+            if i + 2 < len(rows) and _is_label_only_row(rows[i + 2]):
+                label = f"{label}{str(rows[i + 2][0]).strip()}"
+                consumed = 3
+            width = max(len(values), len(row), 1)
+            values = values + [""] * (width - len(values))
+            values[0] = label
+            merged.append(values)
+            i += consumed
+            continue
+        merged.append(row)
+        i += 1
+    return merged
+
+
 def table_to_markdown(table: list[list]) -> str:
     """行列转 Markdown，方便后续整表进一个 chunk、也方便 LLM 读。"""
     if not table:
@@ -37,6 +96,7 @@ def table_to_markdown(table: list[list]) -> str:
         [str(cell or "").replace("\n", " ").strip() for cell in row]
         for row in table
     ]
+    rows = _merge_wrapped_table_rows(rows)
     if not rows:
         return ""
     header = rows[0]
@@ -46,6 +106,86 @@ def table_to_markdown(table: list[list]) -> str:
         padded = row + [""] * max(0, len(header) - len(row))
         lines.append("| " + " | ".join(padded[: len(header)]) + " |")
     return "\n".join(lines)
+
+
+def _markdown_column_count(md: str) -> int:
+    for line in (md or "").splitlines():
+        line = line.strip()
+        if line.startswith("|") and "---" not in line:
+            # | a | b | → 两侧空段不算列
+            parts = [p for p in line.split("|")]
+            cells = parts[1:-1] if len(parts) >= 3 else parts
+            return len(cells)
+    return 0
+
+
+def _strip_markdown_header(md: str) -> str:
+    """去掉续表重复的表头与分隔行，只保留数据行。"""
+    lines = [ln for ln in (md or "").splitlines() if ln.strip()]
+    if len(lines) >= 2 and "---" in lines[1]:
+        return "\n".join(lines[2:])
+    return "\n".join(lines)
+
+
+def _is_noise_block(block: dict) -> bool:
+    """跨页表之间夹着的页眉/页码等，可丢弃后仍合并续表。"""
+    content = str(block.get("content") or "").strip()
+    if not content:
+        return True
+    if is_noise_line(content):
+        return True
+    btype = block.get("block_type")
+    # 页眉常被识别成 title：含「年度报告」、孤立页码、或「9 / 143」
+    if btype == "title" and len(content) <= 80:
+        if "年度报告" in content:
+            return True
+        if re.fullmatch(r"\d+", content):
+            return True
+        if re.fullmatch(r"\d+\s*/\s*\d+", content):
+            return True
+    return False
+
+
+def _merge_continued_table_blocks(blocks: list[dict]) -> list[dict]:
+    """合并跨页续表：相邻 table（中间可夹噪声）且列数一致则拼成一块。"""
+    if not blocks:
+        return blocks
+    merged: list[dict] = []
+    i = 0
+    while i < len(blocks):
+        block = blocks[i]
+        if block.get("block_type") != "table":
+            merged.append(block)
+            i += 1
+            continue
+
+        current = dict(block)
+        current_content = str(current.get("content") or "")
+        cols = _markdown_column_count(current_content)
+        j = i + 1
+        while j < len(blocks):
+            # 跳过噪声夹层，记录区间
+            k = j
+            while k < len(blocks) and _is_noise_block(blocks[k]):
+                k += 1
+            if k >= len(blocks) or blocks[k].get("block_type") != "table":
+                break
+            nxt = blocks[k]
+            page_gap = abs(
+                int(nxt.get("page_num") or 0) - int(current.get("page_num") or 0)
+            )
+            nxt_cols = _markdown_column_count(str(nxt.get("content") or ""))
+            if page_gap > 1 or cols == 0 or nxt_cols != cols:
+                break
+            body = _strip_markdown_header(str(nxt.get("content") or ""))
+            if body.strip():
+                current_content = current_content.rstrip() + "\n" + body.strip()
+                current["content"] = current_content
+            # page_num 保留首块；噪声夹层丢弃
+            j = k + 1
+        merged.append(current)
+        i = j if j > i else i + 1
+    return merged
 
 
 def _line_in_table(line_bbox: tuple[float, ...], table_bboxes: list[tuple]) -> bool:
@@ -226,4 +366,4 @@ def parse_pdf(
         if plumber_doc is not None:
             plumber_doc.close()
         fitz_doc.close()
-    return _items_to_blocks(items, source)
+    return _merge_continued_table_blocks(_items_to_blocks(items, source))

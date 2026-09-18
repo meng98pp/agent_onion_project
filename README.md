@@ -62,6 +62,9 @@ python src\rag\evaluate_ragas.py --ragas   # 需已装 ragas/datasets，会额�
 - `evaluation/gold_qa.json`：金标题
 - `evaluation/results/*.json`：Hit@K / 消融（及可选 RAGAS）结果
 
+### v3.1说明
+优化了解析、分块、评估，效果一般。进阶可使用MinerU/Marker/PaddleOCR/Qwen-VL等工具解析
+
 ## 测试
 
 ```powershell

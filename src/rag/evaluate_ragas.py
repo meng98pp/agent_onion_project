@@ -22,6 +22,7 @@ from src.common.config import (
     OPENAI_MODEL,
 )
 from src.rag.ask import ask
+from src.rag.hit_criteria import content_hit_at_k, doc_hit_at_k
 
 ModeName = Literal["vector_only", "hybrid", "hybrid_rerank"]
 
@@ -34,16 +35,9 @@ def load_gold(path: Path | None = None) -> list[dict[str, Any]]:
     return data
 
 
+# 兼容旧导入名：现等于 doc_hit（仅公司名子串）
 def hit_at_k(hits: list[dict[str, Any]], must_substr: str) -> bool:
-    """TopK 的 text 或 source 是否包含必须子串。"""
-    needle = (must_substr or "").strip()
-    if not needle:
-        return False
-    for h in hits:
-        blob = f"{h.get('text') or ''} {h.get('source') or ''}"
-        if needle in blob:
-            return True
-    return False
+    return doc_hit_at_k(hits, must_substr)
 
 
 def run_mode(
@@ -53,7 +47,8 @@ def run_mode(
     k: int = 5,
 ) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
-    hits_flags: list[bool] = []
+    content_flags: list[bool] = []
+    doc_flags: list[bool] = []
 
     for i, q in enumerate(questions, 1):
         question = str(q.get("question") or "")
@@ -63,8 +58,10 @@ def run_mode(
         try:
             result = ask(question, k=k, mode=mode)
             contexts = [str(h.get("text") or "") for h in result["hits"]]
-            hit = hit_at_k(result["hits"], must)
-            hits_flags.append(hit)
+            doc_hit = doc_hit_at_k(result["hits"], must)
+            content_hit, hit_debug = content_hit_at_k(result["hits"], q)
+            content_flags.append(content_hit)
+            doc_flags.append(doc_hit)
             rows.append(
                 {
                     "question": question,
@@ -73,13 +70,16 @@ def run_mode(
                     "question_type": qtype,
                     "answer": result["answer"],
                     "contexts": contexts,
-                    "hit": hit,
+                    "hit": content_hit,
+                    "doc_hit": doc_hit,
+                    "hit_debug": hit_debug,
                     "citations": result.get("citations") or [],
                     "error": None,
                 }
             )
         except Exception as e:
-            hits_flags.append(False)
+            content_flags.append(False)
+            doc_flags.append(False)
             rows.append(
                 {
                     "question": question,
@@ -89,18 +89,24 @@ def run_mode(
                     "answer": "",
                     "contexts": [],
                     "hit": False,
+                    "doc_hit": False,
+                    "hit_debug": {"error": str(e)},
                     "citations": [],
                     "error": str(e),
                 }
             )
 
-    hit_rate = (sum(hits_flags) / len(hits_flags)) if hits_flags else 0.0
+    n = len(questions)
+    hit_rate = (sum(content_flags) / n) if n else 0.0
+    doc_rate = (sum(doc_flags) / n) if n else 0.0
     return {
         "mode": mode,
         "k": k,
-        "n": len(questions),
+        "n": n,
         "hit_at_k": hit_rate,
-        "hit_count": sum(hits_flags),
+        "hit_count": sum(content_flags),
+        "doc_hit_at_k": doc_rate,
+        "doc_hit_count": sum(doc_flags),
         "rows": rows,
     }
 
@@ -262,8 +268,10 @@ def main() -> None:
             result["ragas"] = ragas_scores
 
         print(
-            f"── {mode} Hit@{args.k} = {result['hit_at_k']:.3f} "
-            f"({result['hit_count']}/{result['n']})",
+            f"── {mode} Hit@{args.k}(content) = {result['hit_at_k']:.3f} "
+            f"({result['hit_count']}/{result['n']}) | "
+            f"doc_hit = {result['doc_hit_at_k']:.3f} "
+            f"({result['doc_hit_count']}/{result['n']})",
             flush=True,
         )
         if ragas_scores:
@@ -276,6 +284,8 @@ def main() -> None:
                 "mode": mode,
                 "hit_at_k": result["hit_at_k"],
                 "hit_count": result["hit_count"],
+                "doc_hit_at_k": result["doc_hit_at_k"],
+                "doc_hit_count": result["doc_hit_count"],
                 "n": result["n"],
                 "ragas": ragas_scores,
             }
