@@ -82,6 +82,35 @@ def get_openai_client():
     )
 
 
+# V4：聊天 LLM（工具调用）；密钥仍只从本模块读取
+CHAT_PROVIDERS = {
+    "dashscope": {
+        "env_key": "DASHSCOPE_API_KEY",
+        "base_url": OPENAI_BASE_URL,
+        "model": OPENAI_MODEL,
+    },
+    "deepseek": {
+        "env_key": "DEEPSEEK_API_KEY",
+        "base_url": "https://api.deepseek.com",
+        "model": os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+    },
+}
+
+
+def get_chat_client(provider: str = "dashscope"):
+    """返回 (OpenAI 兼容 client, model_name)。"""
+    from openai import OpenAI
+
+    if provider not in CHAT_PROVIDERS:
+        raise ValueError(f"未知 provider: {provider!r}，可选 {list(CHAT_PROVIDERS)}")
+    cfg = CHAT_PROVIDERS[provider]
+    api_key = os.getenv(cfg["env_key"], "")
+    if not api_key:
+        raise EnvironmentError(f"缺少环境变量: {cfg['env_key']}")
+    client = OpenAI(api_key=api_key, base_url=cfg["base_url"], timeout=LLM_TIMEOUT_SEC)
+    return client, cfg["model"]
+
+
 if __name__ == "__main__":
     missing = missing_required_keys()
     print("OK" if not missing else f"MISSING: {missing}")
