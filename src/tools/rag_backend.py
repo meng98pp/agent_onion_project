@@ -18,17 +18,7 @@ if str(_ROOT) not in sys.path:
 import src.common.config  # noqa: F401,E402 — 加载 .env + OpenMP 兼容开关
 from src.common.types import ToolResult, fail, ok  # noqa: E402
 from src.rag.retriever import search as _vector_search  # noqa: E402
-
-# 与当前 vectorstore 对齐（见 faiss_meta 中的 stock_code / year）
-COMPANIES: list[dict[str, Any]] = [
-    {"name": "贵州茅台", "stock_code": "600519", "years": ["2021", "2022", "2023", "2024", "2025"]},
-    {"name": "五粮液", "stock_code": "000858", "years": ["2021", "2022", "2023", "2024", "2025"]},
-    {"name": "宁德时代", "stock_code": "300750", "years": ["2021", "2022", "2023", "2024", "2025"]},
-    {"name": "海康威视", "stock_code": "002415", "years": ["2021", "2022", "2023", "2024", "2025"]},
-    {"name": "中国平安", "stock_code": "601318", "years": ["2021", "2022", "2023", "2024", "2025"]},
-]
-
-_CODE_TO_NAME = {c["stock_code"]: c["name"] for c in COMPANIES}
+from src.tools.company_lookup import CODE_TO_NAME, COMPANIES  # noqa: E402
 
 
 def _format_hit(hit: dict[str, Any]) -> dict[str, Any]:
@@ -37,7 +27,7 @@ def _format_hit(hit: dict[str, Any]) -> dict[str, Any]:
         "score": float(hit.get("score") or 0.0),
         "text": hit.get("text") or hit.get("content") or "",
         "stock_code": code,
-        "company": _CODE_TO_NAME.get(code, code),
+        "company": CODE_TO_NAME.get(code, code),
         "year": str(hit.get("year") or ""),
         "section": hit.get("section_path") or hit.get("section") or "",
         "page_num": hit.get("page_num"),

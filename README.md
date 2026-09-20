@@ -1,6 +1,6 @@
 # FinAgent Onion Learning
 
-单仓叠加的金融分析 Agent 学习工程。当前版本：**V4 工具调用（Function Call × MCP × CLI）**。
+单仓叠加的金融分析 Agent 学习工程。当前版本：**V5 ReAct 金融分析 Agent**。
 
 ## 环境
 
@@ -9,7 +9,7 @@
 ```powershell
 conda activate py12
 cd ./finagent_onion_learning
-pip install -r requirements.txt   # 首次或缺包时（V4 新增 mcp）
+pip install -r requirements.txt   # 首次或缺包时（V5 新增 akshare）
 python -V                         # 确认走的是 py12
 ```
 
@@ -85,10 +85,25 @@ python src\adapters\cli\main.py weather --city 北京
 
 产物：`output/compare_result.md`（同一问题 × 三方式对比表）。
 
+## V5 运行
+
+多步 ReAct：`company_lookup` → 年报 RAG / AkShare 指标与行情 → AST 计算器。可对照手写 Prompt 解析（`manual`）与原生 Function Calling（`fc`）。
+
+先确保已建 V2 索引，并 `pip install akshare`。
+
+```powershell
+python src\agent\loop.py --mode fc --q "对比茅台与五粮液近三年毛利率，并计算差值"
+python src\agent\loop.py --mode manual --q "分析一下贵州茅台2024年年报中提到的一些重要承诺事项？"
+uvicorn src.agent.serve:app --reload --port 8012
+python src\agent\evaluate.py
+```
+
+浏览器打开 `http://127.0.0.1:8012` 可看逐步轨迹。产物：`output/evaluate_v5.json`。
+
 ## 测试
 
 ```powershell
-pytest tests\ingest\test_chunking.py tests\rag\test_retriever.py tests\rag\test_rrf.py -q
+pytest tests\ingest\test_chunking.py tests\rag\test_retriever.py tests\rag\test_rrf.py tests\tools\test_calculator_sandbox.py -q
 python -c "from src.tools.rag_backend import rag_search; assert rag_search('测试')['ok'] in (True, False)"
 python -c "import json,glob; [print(p,len(json.load(open(p,encoding='utf-8')))) for p in glob.glob('data/chunks/*.json')]"
 ```

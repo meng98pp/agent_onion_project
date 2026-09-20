@@ -62,6 +62,14 @@ EVALUATION_DIR = ROOT / "evaluation"
 EVAL_GOLD_PATH = EVALUATION_DIR / "gold_qa.json"
 EVAL_RESULTS_DIR = EVALUATION_DIR / "results"
 
+# V5：ReAct 循环与金融工具
+MAX_STEPS = int(os.getenv("REACT_MAX_STEPS", "10"))
+REPEAT_ACTION_LIMIT = int(os.getenv("REACT_REPEAT_ACTION_LIMIT", "2"))
+AKSHARE_TIMEOUT_SEC = float(os.getenv("AKSHARE_TIMEOUT_SEC", "30"))
+CALC_MAX_EXPR_LEN = int(os.getenv("CALC_MAX_EXPR_LEN", "200"))
+OUTPUT_DIR = ROOT / "output"
+STATIC_DIR = ROOT / "static"
+
 
 def missing_required_keys() -> list[str]:
     required = ["DASHSCOPE_API_KEY"]
