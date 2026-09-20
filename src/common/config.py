@@ -70,6 +70,21 @@ CALC_MAX_EXPR_LEN = int(os.getenv("CALC_MAX_EXPR_LEN", "200"))
 OUTPUT_DIR = ROOT / "output"
 STATIC_DIR = ROOT / "static"
 
+# V6：四层记忆（Markdown 在 memory/；SQLite / FAISS 在 data/memory/）
+MEMORY_DIR = ROOT / "memory"
+MEMORY_DATA_DIR = ROOT / "vectorstore" / "memory"
+MEMORY_DB_PATH = MEMORY_DATA_DIR / "sessions.db"
+MEMORY_INDEX_DIR = MEMORY_DATA_DIR / "faiss"
+FLUSH_MESSAGE_THRESHOLD = int(os.getenv("FLUSH_MESSAGE_THRESHOLD", "20"))
+MEMORY_COMPACTION_THRESHOLD = int(os.getenv("MEMORY_COMPACTION_THRESHOLD", "50"))
+MEMORY_COMPACTION_KEEP_RECENT = int(os.getenv("MEMORY_COMPACTION_KEEP_RECENT", "20"))
+MEMORY_RECENT_N = int(os.getenv("MEMORY_RECENT_N", "10"))
+MEMORY_RETRIEVE_TOP_K = int(os.getenv("MEMORY_RETRIEVE_TOP_K", "3"))
+MEMORY_VEC_WEIGHT = float(os.getenv("MEMORY_VEC_WEIGHT", "0.7"))
+MEMORY_BM25_WEIGHT = float(os.getenv("MEMORY_BM25_WEIGHT", "0.3"))
+HEARTBEAT_ENABLED = os.getenv("HEARTBEAT_ENABLED", "true").lower() in ("1", "true", "yes")
+HEARTBEAT_RELOAD_SEC = int(os.getenv("HEARTBEAT_RELOAD_SEC", "60"))
+
 
 def missing_required_keys() -> list[str]:
     required = ["DASHSCOPE_API_KEY"]

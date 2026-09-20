@@ -89,12 +89,16 @@ def run(
     question: str,
     max_steps: int | None = None,
     provider: str = "dashscope",
+    extra_system: str | None = None,
 ) -> Generator[dict, None, None]:
     """ReAct 循环，yield 每步 dict（action / final / error / max_steps）。"""
     client, model = get_chat_client(provider)
     steps = max_steps if max_steps is not None else MAX_STEPS
+    system = SYSTEM_PROMPT
+    if extra_system:
+        system = SYSTEM_PROMPT + "\n\n---\n\n" + extra_system
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system},
         {"role": "user", "content": question},
     ]
     last_sig = ""

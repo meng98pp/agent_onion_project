@@ -3,190 +3,168 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>V5 ReAct Financial Agent</title>
+<title>V6 Memory + ReAct Agent</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
-    background: #0f1117;
-    color: #e2e8f0;
-    min-height: 100vh;
+    background: #0f1117; color: #e2e8f0; min-height: 100vh;
   }
   header {
-    background: #1a1d27;
-    border-bottom: 1px solid #2d3148;
-    padding: 16px 32px;
+    background: #1a1d27; border-bottom: 1px solid #2d3148;
+    padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px;
   }
   header h1 { font-size: 18px; font-weight: 600; color: #a78bfa; }
   header .subtitle { font-size: 12px; color: #64748b; margin-top: 4px; }
-  .container { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
-  .input-card {
-    background: #1a1d27;
-    border: 1px solid #2d3148;
-    border-radius: 12px;
-    padding: 20px;
-    margin-bottom: 20px;
+  .workspace-btn {
+    padding: 6px 14px; border-radius: 20px; border: 1px solid #3d4163;
+    background: transparent; color: #94a3b8; font-size: 13px; cursor: pointer;
   }
-  .mode-toggle { display: flex; gap: 8px; margin-bottom: 14px; align-items: center; }
-  .mode-btn {
-    padding: 6px 16px;
-    border-radius: 20px;
-    border: 1px solid #3d4163;
-    background: transparent;
-    color: #94a3b8;
-    font-size: 13px;
-    cursor: pointer;
+  .workspace-btn.active { background: #7c3aed; border-color: #7c3aed; color: #fff; }
+  .container { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+  .memory-layout {
+    max-width: 1180px; margin: 0 auto; padding: 20px 16px;
+    display: grid; grid-template-columns: 1fr 320px; gap: 16px;
+  }
+  @media (max-width: 900px) { .memory-layout { grid-template-columns: 1fr; } }
+  .input-card, .panel, .chat-card {
+    background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px;
+  }
+  .input-card { padding: 20px; margin-bottom: 20px; }
+  .mode-toggle { display: flex; gap: 8px; margin-bottom: 14px; align-items: center; flex-wrap: wrap; }
+  .mode-btn, .send-btn, .ghost-btn {
+    padding: 6px 16px; border-radius: 20px; border: 1px solid #3d4163;
+    background: transparent; color: #94a3b8; font-size: 13px; cursor: pointer;
   }
   .mode-btn.active { background: #7c3aed; border-color: #7c3aed; color: #fff; }
   .input-row { display: flex; gap: 10px; }
   textarea {
-    flex: 1;
-    background: #0f1117;
-    border: 1px solid #2d3148;
-    border-radius: 8px;
-    color: #e2e8f0;
-    padding: 10px 14px;
-    font-size: 14px;
-    resize: vertical;
-    min-height: 72px;
-    outline: none;
+    flex: 1; background: #0f1117; border: 1px solid #2d3148; border-radius: 8px;
+    color: #e2e8f0; padding: 10px 14px; font-size: 14px; resize: vertical; min-height: 72px; outline: none;
   }
   textarea:focus { border-color: #7c3aed; }
   .send-btn {
-    padding: 0 24px;
-    background: #7c3aed;
-    border: none;
-    border-radius: 8px;
-    color: #fff;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    white-space: nowrap;
+    padding: 0 24px; background: #7c3aed; border: none; border-radius: 8px;
+    color: #fff; font-size: 14px; font-weight: 600; white-space: nowrap;
   }
   .send-btn:disabled { background: #3d4163; cursor: not-allowed; }
+  .ghost-btn { border-radius: 8px; }
+  .ghost-btn:hover { border-color: #7c3aed; color: #a78bfa; }
   .examples { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
   .example-chip {
-    background: #1e2235;
-    border: 1px solid #2d3148;
-    border-radius: 16px;
-    padding: 4px 12px;
-    font-size: 12px;
-    color: #94a3b8;
-    cursor: pointer;
+    background: #1e2235; border: 1px solid #2d3148; border-radius: 16px;
+    padding: 4px 12px; font-size: 12px; color: #94a3b8; cursor: pointer;
   }
   .example-chip:hover { border-color: #7c3aed; color: #a78bfa; }
   .status-bar {
-    display: none;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 16px;
-    background: #1a1d27;
-    border: 1px solid #2d3148;
-    border-radius: 8px;
-    margin-bottom: 16px;
-    font-size: 13px;
-    color: #94a3b8;
+    display: none; align-items: center; gap: 10px; padding: 10px 16px;
+    background: #1a1d27; border: 1px solid #2d3148; border-radius: 8px;
+    margin-bottom: 16px; font-size: 13px; color: #94a3b8;
   }
   .status-bar.visible { display: flex; }
   .spinner {
-    width: 16px; height: 16px;
-    border: 2px solid #3d4163;
-    border-top-color: #7c3aed;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    flex-shrink: 0;
+    width: 16px; height: 16px; border: 2px solid #3d4163; border-top-color: #7c3aed;
+    border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
   .steps-container { display: flex; flex-direction: column; gap: 12px; }
-  .step-card {
-    background: #1a1d27;
-    border: 1px solid #2d3148;
-    border-radius: 10px;
-    overflow: hidden;
+  .step-card, .final-card {
+    background: #1a1d27; border: 1px solid #2d3148; border-radius: 10px; overflow: hidden;
   }
-  .step-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 16px;
-    cursor: pointer;
-  }
-  .step-badge {
-    background: #2d3148;
-    border-radius: 6px;
-    padding: 2px 8px;
-    font-size: 11px;
-    color: #64748b;
-    font-weight: 600;
-  }
+  .step-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; }
+  .step-badge { background: #2d3148; border-radius: 6px; padding: 2px 8px; font-size: 11px; color: #64748b; font-weight: 600; }
   .step-title { font-size: 14px; font-weight: 500; flex: 1; }
   .step-body { padding: 0 16px 14px; }
-  .step-body.collapsed { display: none; }
-  .thought-block  { border-left: 3px solid #38bdf8; padding-left: 12px; margin-bottom: 10px; }
-  .action-block   { border-left: 3px solid #fbbf24; padding-left: 12px; margin-bottom: 10px; }
-  .obs-block      { border-left: 3px solid #34d399; padding-left: 12px; }
-  .block-label {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    margin-bottom: 4px;
-  }
+  .thought-block, .action-block, .obs-block { padding-left: 12px; margin-bottom: 10px; }
+  .thought-block { border-left: 3px solid #38bdf8; }
+  .action-block { border-left: 3px solid #fbbf24; }
+  .obs-block { border-left: 3px solid #34d399; }
+  .block-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
   .thought-block .block-label { color: #38bdf8; }
   .action-block .block-label { color: #fbbf24; }
   .obs-block .block-label { color: #34d399; }
-  .block-content {
-    font-size: 13px;
-    line-height: 1.6;
-    color: #cbd5e1;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-  .obs-block .block-content {
-    max-height: 220px;
-    overflow-y: auto;
-    background: #0d1017;
-    border-radius: 4px;
-    padding: 6px 10px;
-  }
+  .block-content { font-size: 13px; line-height: 1.6; color: #cbd5e1; white-space: pre-wrap; word-break: break-word; }
+  .obs-block .block-content { max-height: 220px; overflow-y: auto; background: #0d1017; border-radius: 4px; padding: 6px 10px; }
   .tool-pill {
-    display: inline-block;
-    background: #2d1f5e;
-    border: 1px solid #4c1d95;
-    border-radius: 4px;
-    padding: 1px 8px;
-    font-size: 12px;
-    color: #a78bfa;
-    font-family: monospace;
-    margin-bottom: 6px;
+    display: inline-block; background: #2d1f5e; border: 1px solid #4c1d95; border-radius: 4px;
+    padding: 1px 8px; font-size: 12px; color: #a78bfa; font-family: monospace; margin-bottom: 6px;
   }
-  .args-code {
-    background: #0f1117;
-    border-radius: 4px;
-    padding: 6px 10px;
-    font-family: monospace;
-    font-size: 12px;
-    color: #94a3b8;
-    margin-top: 4px;
-  }
-  .final-card {
-    background: #1a1d27;
-    border: 1px solid #4c1d95;
-    border-radius: 10px;
-    padding: 20px;
-  }
+  .args-code { background: #0f1117; border-radius: 4px; padding: 6px 10px; font-family: monospace; font-size: 12px; color: #94a3b8; }
+  .final-card { border: 1px solid #4c1d95; padding: 20px; }
   .final-card h3 { color: #a78bfa; font-size: 14px; margin-bottom: 10px; }
   .final-card .answer-text { font-size: 15px; line-height: 1.8; white-space: pre-wrap; }
   .meta-row { margin-top: 12px; font-size: 12px; color: #475569; display: flex; gap: 16px; }
   .fc-thought-note { font-size: 12px; color: #475569; font-style: italic; }
+  .chat-card { display: flex; flex-direction: column; min-height: 640px; }
+  .chat-toolbar { display: flex; gap: 8px; padding: 12px 14px; border-bottom: 1px solid #2d3148; flex-wrap: wrap; }
+  .chat-log { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; max-height: 520px; }
+  .bubble { max-width: 86%; padding: 10px 12px; border-radius: 12px; font-size: 14px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
+  .bubble.user { align-self: flex-end; background: #4c1d95; }
+  .bubble.assistant { align-self: flex-start; background: #22263a; }
+  .bubble.heartbeat { align-self: flex-start; background: #2e1065; border: 1px solid #7c3aed; font-size: 13px; }
+  .bubble.system { align-self: center; background: #161822; color: #64748b; font-size: 12px; }
+  .chat-input { padding: 12px; border-top: 1px solid #2d3148; }
+  .panel { padding: 14px; }
+  .panel h3 { font-size: 13px; color: #a78bfa; margin-bottom: 10px; }
+  .panel-block { font-size: 12px; color: #94a3b8; line-height: 1.55; margin-bottom: 12px; }
+  .hit { background: #161822; border: 1px solid #2d3148; border-radius: 8px; padding: 8px; margin-bottom: 8px; }
+  .hit .title { color: #e2e8f0; font-weight: 600; }
+  .hidden { display: none !important; }
 </style>
 </head>
 <body>
 <header>
-  <h1>V5 ReAct Financial Agent</h1>
-  <div class="subtitle">Thought → Action → Observation | 年报 RAG + AkShare 指标/行情 + AST 计算器</div>
+  <div>
+    <h1>V6 Memory + ReAct Financial Agent</h1>
+    <div class="subtitle">四层记忆 · 七配置 · Flush 三写 · HEARTBEAT · 年报 ReAct</div>
+  </div>
+  <div>
+    <button class="workspace-btn active" id="wsMemory" onclick="setWorkspace('memory')">记忆对话</button>
+    <button class="workspace-btn" id="wsReact" onclick="setWorkspace('react')">ReAct 轨迹</button>
+  </div>
 </header>
-<div class="container">
+
+<div id="memoryWorkspace" class="memory-layout">
+  <div class="chat-card">
+    <div class="chat-toolbar">
+      <button class="ghost-btn" onclick="newSession()">新会话</button>
+      <button class="ghost-btn" onclick="runFlush()">Flush</button>
+      <button class="ghost-btn" onclick="exitSession()">退出 /exit</button>
+      <button class="ghost-btn" onclick="showLayers()">四层 /layers</button>
+      <button class="ghost-btn" onclick="refreshMemories()">刷新记忆面板</button>
+    </div>
+    <div class="chat-log" id="chatLog"></div>
+    <div class="chat-input">
+      <div class="input-row">
+        <textarea id="chatInput" placeholder="告诉我你的偏好，或输入 /flush /new /exit /layers /help"></textarea>
+        <button class="send-btn" id="chatSendBtn" onclick="sendChat()">发送</button>
+      </div>
+      <div class="examples">
+        <span class="example-chip" onclick="setChat(this.textContent)">我关注茅台和宁德时代，回答尽量给关键数字</span>
+        <span class="example-chip" onclick="setChat(this.textContent)">请记住我更喜欢简洁结论，少客套</span>
+        <span class="example-chip" onclick="setChat(this.textContent)">/flush</span>
+      </div>
+    </div>
+  </div>
+  <aside>
+    <div class="panel" style="margin-bottom:12px;">
+      <h3>四层加载</h3>
+      <div class="panel-block" id="layerPanel">等待对话…</div>
+      <h3>语义检索</h3>
+      <div class="panel-block" id="searchPanel">尚无命中</div>
+    </div>
+    <div class="panel" style="margin-bottom:12px;">
+      <h3>Flush 进度</h3>
+      <div class="panel-block" id="flushPanel">尚未 Flush</div>
+    </div>
+    <div class="panel">
+      <h3>记忆统计</h3>
+      <div class="panel-block" id="statPanel">加载中…</div>
+    </div>
+  </aside>
+</div>
+
+<div id="reactWorkspace" class="container hidden">
   <div class="input-card">
     <div class="mode-toggle">
       <span style="font-size:13px;color:#64748b;margin-right:4px;">实现方式：</span>
@@ -203,7 +181,6 @@
       <span class="example-chip" onclick="setQuestion(this.textContent)">宁德时代2021-2023年营收复合增长率是多少？</span>
       <span class="example-chip" onclick="setQuestion(this.textContent)">贵州茅台过去一年（2023年全年）股价涨跌幅？</span>
       <span class="example-chip" onclick="setQuestion(this.textContent)">海康威视2023年年报提到了哪些主要风险？</span>
-      <span class="example-chip" onclick="setQuestion(this.textContent)">预测明年A股市场走势</span>
     </div>
   </div>
   <div class="status-bar" id="statusBar">
@@ -212,18 +189,26 @@
   </div>
   <div class="steps-container" id="stepsContainer"></div>
 </div>
+
 <script>
   let currentMode = 'manual';
   let isRunning = false;
+  let chatRunning = false;
+  let assistantBubble = null;
 
+  function setWorkspace(name) {
+    document.getElementById('memoryWorkspace').classList.toggle('hidden', name !== 'memory');
+    document.getElementById('reactWorkspace').classList.toggle('hidden', name !== 'react');
+    document.getElementById('wsMemory').classList.toggle('active', name === 'memory');
+    document.getElementById('wsReact').classList.toggle('active', name === 'react');
+  }
   function setMode(mode, btn) {
     currentMode = mode;
-    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#reactWorkspace .mode-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
   }
-  function setQuestion(text) {
-    document.getElementById('question').value = text;
-  }
+  function setQuestion(text) { document.getElementById('question').value = text; }
+  function setChat(text) { document.getElementById('chatInput').value = text; }
   function setStatus(text, visible) {
     document.getElementById('statusText').textContent = text;
     document.getElementById('statusBar').classList.toggle('visible', visible);
@@ -235,10 +220,33 @@
     isRunning = !enabled;
   }
   function esc(s) {
-    return String(s)
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
+  function appendBubble(role, text) {
+    const node = document.createElement('div');
+    node.className = 'bubble ' + role;
+    node.textContent = text;
+    document.getElementById('chatLog').appendChild(node);
+    node.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    return node;
+  }
+  async function readSSE(resp, onEvent) {
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try { onEvent(JSON.parse(line.slice(6))); } catch (_) {}
+      }
+    }
+  }
+
   function createStepCard(stepData) {
     const card = document.createElement('div');
     card.className = 'step-card';
@@ -306,43 +314,29 @@
         body: JSON.stringify({ question, max_steps: 10 }),
       });
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop();
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          let data;
-          try { data = JSON.parse(line.slice(6)); } catch { continue; }
-          if (data.type === 'start') {
-            setStatus('思考中... (' + (currentMode === 'manual' ? '手写Prompt解析' : 'Function Calling') + ')', true);
-          } else if (data.type === 'action') {
-            actionStepCount++;
-            setStatus('Step ' + data.step + '：正在调用 ' + data.action + '...', true);
-            const card = createStepCard(data);
-            document.getElementById('stepsContainer').appendChild(card);
-            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          } else if (data.type === 'final') {
-            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-            const card = createFinalCard(data, actionStepCount, elapsed);
-            document.getElementById('stepsContainer').appendChild(card);
-            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            setStatus('完成', false);
-          } else if (data.type === 'max_steps' || data.type === 'error') {
-            document.getElementById('stepsContainer').appendChild(
-              createErrorCard(data.answer || data.observation || '未知错误')
-            );
-            setStatus('', false);
-          } else if (data.type === 'done') {
-            setStatus('', false);
-          }
+      await readSSE(resp, (data) => {
+        if (data.type === 'start') {
+          setStatus('思考中... (' + (currentMode === 'manual' ? '手写Prompt解析' : 'Function Calling') + ')', true);
+        } else if (data.type === 'action') {
+          actionStepCount++;
+          setStatus('Step ' + data.step + '：正在调用 ' + data.action + '...', true);
+          const card = createStepCard(data);
+          document.getElementById('stepsContainer').appendChild(card);
+          card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } else if (data.type === 'final') {
+          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+          const card = createFinalCard(data, actionStepCount, elapsed);
+          document.getElementById('stepsContainer').appendChild(card);
+          setStatus('完成', false);
+        } else if (data.type === 'max_steps' || data.type === 'error') {
+          document.getElementById('stepsContainer').appendChild(
+            createErrorCard(data.answer || data.observation || '未知错误')
+          );
+          setStatus('', false);
+        } else if (data.type === 'done') {
+          setStatus('', false);
         }
-      }
+      });
     } catch (err) {
       document.getElementById('stepsContainer').appendChild(createErrorCard('请求失败: ' + err.message));
       setStatus('', false);
@@ -350,9 +344,148 @@
       setSendEnabled(true);
     }
   }
+
+  async function sendChat() {
+    if (chatRunning) return;
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim();
+    if (!text) return;
+    if (text === '/help') {
+      appendBubble('system', '命令：/flush 写入记忆；/layers 打印四层加载；/new 新会话（不 Flush）；/exit 先 Flush 再关会话。');
+      input.value = '';
+      return;
+    }
+    if (text === '/flush') { input.value = ''; await runFlush(); return; }
+    if (text === '/layers') { input.value = ''; await showLayers(); return; }
+    if (text === '/new') { input.value = ''; await newSession(); return; }
+    if (text === '/exit') { input.value = ''; await exitSession(); return; }
+    chatRunning = true;
+    document.getElementById('chatSendBtn').disabled = true;
+    appendBubble('user', text);
+    input.value = '';
+    assistantBubble = appendBubble('assistant', '');
+    try {
+      const resp = await fetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text }),
+      });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      await readSSE(resp, handleChatEvent);
+    } catch (err) {
+      assistantBubble.textContent = '请求失败: ' + err.message;
+    } finally {
+      chatRunning = false;
+      document.getElementById('chatSendBtn').disabled = false;
+      assistantBubble = null;
+    }
+  }
+  function handleChatEvent(data) {
+    if (data.type === 'memory_load') {
+      document.getElementById('layerPanel').innerHTML = (data.layers || []).map(function (layer) {
+        return esc(layer.name) + ' · ' + esc(layer.source) + ' · ' + layer.chars + ' 字';
+      }).join('<br>') || '（空）';
+    } else if (data.type === 'semantic_search') {
+      const hits = data.results || [];
+      document.getElementById('searchPanel').innerHTML = hits.length ? hits.map(function (hit) {
+        return '<div class="hit"><div class="title">[' + esc(hit.category) + '] ' + esc(hit.title) +
+          '</div>' + esc(hit.content) + '<div>' + (hit.score * 100).toFixed(0) + '% · ' + esc(hit.source) + '</div></div>';
+      }).join('') : '无命中';
+    } else if (data.type === 'token' && assistantBubble) {
+      assistantBubble.textContent += data.text || '';
+      assistantBubble.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    } else if (data.type === 'done' && assistantBubble && !assistantBubble.textContent) {
+      assistantBubble.textContent = data.response || '';
+    } else if (data.type === 'error' && assistantBubble) {
+      assistantBubble.textContent = data.message || assistantBubble.textContent;
+    }
+  }
+  function handleFlushEvent(data) {
+    if (data.type === 'flush_pass1') {
+      document.getElementById('flushPanel').innerHTML = 'Pass1 USER：' + (data.count || 0) + ' 项';
+    } else if (data.type === 'flush_pass2') {
+      document.getElementById('flushPanel').innerHTML +=
+        '<br>Pass2 MEMORY：' + (data.count || 0) + ' 条<br>日记：' + esc(data.daily_summary || '');
+    } else if (data.type === 'flush_pass3') {
+      document.getElementById('flushPanel').innerHTML += '<br>Pass3 向量：' + (data.vectorized || 0);
+    } else if (data.type === 'flush_compaction') {
+      document.getElementById('flushPanel').innerHTML += '<br>压缩 ' + data.before + ' → ' + data.after;
+    } else if (data.type === 'flush_done') {
+      appendBubble('system', data.error ? ('Flush 失败：' + data.error) : (data.summary || 'Flush 完成'));
+      refreshMemories();
+    }
+  }
+  async function runFlush() {
+    appendBubble('system', '正在 Memory Flush…');
+    document.getElementById('flushPanel').textContent = 'Flush 开始';
+    const resp = await fetch('/flush', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    await readSSE(resp, handleFlushEvent);
+  }
+  async function exitSession() {
+    appendBubble('system', '正在退出：先 Flush 再关会话…');
+    document.getElementById('flushPanel').textContent = 'Flush 开始';
+    const resp = await fetch('/session/exit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    await readSSE(resp, function (data) {
+      handleFlushEvent(data);
+      if (data.type === 'session_exited') {
+        document.getElementById('chatLog').innerHTML = '';
+        appendBubble('system', '已 Flush 并退出会话 #' + data.old_session_id + '，当前新会话 #' + data.session_id);
+        refreshMemories();
+      }
+    });
+  }
+  async function showLayers() {
+    const resp = await fetch('/layers');
+    const data = await resp.json();
+    appendBubble('system', data.report || '（无法读取四层记忆）');
+    document.getElementById('layerPanel').innerHTML = (data.items || []).map(function (item) {
+      return 'L' + item.layer + ' · ' + esc(item.label) + ' · ' + item.chars + ' 字';
+    }).join('<br>') +
+      '<br>本会话 ' + (data.session_messages || 0) + ' 条 · FAISS ' + (data.faiss_total || 0) +
+      ' · FTS ' + (data.fts_total || 0);
+    document.getElementById('layerPanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  async function newSession() {
+    const resp = await fetch('/session/new', { method: 'POST' });
+    const data = await resp.json();
+    appendBubble('system', '已开新会话 #' + data.session_id + '（长期记忆仍在）');
+  }
+  async function refreshMemories() {
+    const resp = await fetch('/memories');
+    const data = await resp.json();
+    document.getElementById('statPanel').innerHTML =
+      '会话 #' + (data.session_id || '-') +
+      '<br>MEMORY 条目：' + data.entry_count +
+      '<br>FAISS：' + data.faiss_total +
+      '<br>FTS：' + data.fts_total + (data.fts_available ? '' : '（不可用）');
+  }
+  function connectHeartbeat() {
+    const src = new EventSource('/stream');
+    src.onmessage = function (ev) {
+      let data;
+      try { data = JSON.parse(ev.data); } catch (_) { return; }
+      const text = data.message || data.error;
+      if (!text) return;
+      if (data.type && String(data.type).indexOf('heartbeat') === 0) {
+        appendBubble('heartbeat', '⏰ ' + text);
+      } else if (data.type === 'auto_flush') {
+        appendBubble('system', text);
+      }
+    };
+  }
+
   document.getElementById('question').addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendQuery(); }
   });
+  document.getElementById('chatInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+  });
+  refreshMemories();
+  connectHeartbeat();
 </script>
 </body>
 </html>

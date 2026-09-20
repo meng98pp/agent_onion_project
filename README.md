@@ -1,6 +1,6 @@
 # FinAgent Onion Learning
 
-单仓叠加的金融分析 Agent 学习工程。当前版本：**V5 ReAct 金融分析 Agent**。
+单仓叠加的金融分析 Agent 学习工程。当前版本：**V6 四层记忆 + 七配置 + 压缩**。
 
 ## 环境
 
@@ -9,7 +9,7 @@
 ```powershell
 conda activate py12
 cd ./finagent_onion_learning
-pip install -r requirements.txt   # 首次或缺包时（V5 新增 akshare）
+pip install -r requirements.txt   # 首次或缺包时（V6 新增 apscheduler）
 python -V                         # 确认走的是 py12
 ```
 
@@ -100,10 +100,22 @@ python src\agent\evaluate.py
 
 浏览器打开 `http://127.0.0.1:8012` 可看逐步轨迹。产物：`output/evaluate_v5.json`。
 
+## V6 运行
+
+跨会话记忆：七类 Markdown（`memory/`）+ SQLite 会话 + FAISS/FTS5 混合检索 + Memory Flush。对话中告诉 Agent 偏好，`/flush` 或满 20 条后新开会话应仍记得。
+
+```powershell
+uvicorn src.agent.serve:app --port 8013
+python -c "from src.memory_sys.loader import load_base_prompt; assert len(load_base_prompt())>0"
+```
+
+浏览器打开 `http://127.0.0.1:8013`：默认「记忆对话」；也可切回 V5 ReAct 轨迹（会把 USER/MEMORY 拼进 system prompt）。HEARTBEAT 默认开启调度器，示例任务 `enabled: false`。
+
 ## 测试
 
 ```powershell
-pytest tests\ingest\test_chunking.py tests\rag\test_retriever.py tests\rag\test_rrf.py tests\tools\test_calculator_sandbox.py -q
+pytest tests\ingest\test_chunking.py tests\rag\test_retriever.py tests\rag\test_rrf.py tests\tools\test_calculator_sandbox.py tests\memory_sys\test_loader.py -q
 python -c "from src.tools.rag_backend import rag_search; assert rag_search('测试')['ok'] in (True, False)"
+python -c "from src.memory_sys.loader import load_base_prompt; assert len(load_base_prompt())>0"
 python -c "import json,glob; [print(p,len(json.load(open(p,encoding='utf-8')))) for p in glob.glob('data/chunks/*.json')]"
 ```
