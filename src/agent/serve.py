@@ -1,4 +1,4 @@
-"""FastAPI：V5 ReAct 轨迹 + V6 记忆对话 / Flush / HEARTBEAT。"""
+"""FastAPI：V5 ReAct 轨迹 + V6 记忆 + V7 Skill 热拔插。"""
 
 from __future__ import annotations
 
@@ -86,7 +86,7 @@ async def lifespan(_app: FastAPI):
         db.close_session(current_session_id)
 
 
-app = FastAPI(title="V6 Memory + ReAct Financial Agent", lifespan=lifespan)
+app = FastAPI(title="V7 Skill Harness + Memory + ReAct", lifespan=lifespan)
 
 
 class QueryRequest(BaseModel):
@@ -534,9 +534,49 @@ async def stream_events():
     )
 
 
+def _skills_payload(*, force_reload: bool) -> dict:
+    """列出 L0 技能索引；force_reload 时重扫目录。"""
+    from src.harness.skill_loader import get_skill_loader
+    from src.harness.tool_registry import get_tools_schema, rebuild_handlers
+
+    sl = get_skill_loader()
+    if force_reload:
+        count = sl.reload()
+    else:
+        sl.maybe_reload_if_stale()
+        count = len(sl.skills)
+    rebuild_handlers()
+    l0 = sl.list_l0()
+    return {
+        "ok": True,
+        "count": count,
+        "skills": l0,
+        "l0_prompt_chars": len(sl.build_l0_prompt_section()),
+        "meta_only_schema": [
+            item["function"]["name"] for item in get_tools_schema(activated_skills=set())
+        ],
+    }
+
+
+@app.get("/skills")
+async def get_skills():
+    """列出已发现 Skill（L0）与工具名；mtime 变化会自动热加载。"""
+    return JSONResponse(_skills_payload(force_reload=False))
+
+
+@app.post("/reload")
+async def reload_skills():
+    """强制重扫 skills/ 目录（热拔插）。"""
+    return JSONResponse(_skills_payload(force_reload=True))
+
+
 @app.get("/health")
 async def health():
-    """探活：模型、会话、记忆条数、FTS / HEARTBEAT 是否可用。"""
+    """探活：模型、会话、记忆条数、FTS / HEARTBEAT / Skill 是否可用。"""
+    from src.harness.skill_loader import get_skill_loader
+
+    sl = get_skill_loader()
+    sl.maybe_reload_if_stale()
     return {
         "status": "ok",
         "model": OPENAI_MODEL,
@@ -545,6 +585,7 @@ async def health():
         "faiss_entries": vs.total_entries if vs else 0,
         "fts_available": fts.available if fts else False,
         "heartbeat": bool(hb_scheduler),
+        "skills": len(sl.skills),
     }
 
 

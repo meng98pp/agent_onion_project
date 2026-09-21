@@ -85,6 +85,9 @@ MEMORY_BM25_WEIGHT = float(os.getenv("MEMORY_BM25_WEIGHT", "0.3"))
 HEARTBEAT_ENABLED = os.getenv("HEARTBEAT_ENABLED", "true").lower() in ("1", "true", "yes")
 HEARTBEAT_RELOAD_SEC = int(os.getenv("HEARTBEAT_RELOAD_SEC", "60"))
 
+# V7：Skill 热拔插（每个技能一个目录，Harness 不写股票算法）
+SKILLS_DIR = ROOT / "skills"
+
 
 def missing_required_keys() -> list[str]:
     required = ["DASHSCOPE_API_KEY"]

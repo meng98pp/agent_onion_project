@@ -1,4 +1,4 @@
-"""手写 Prompt 解析版 ReAct：Thought → Action → Observation。"""
+"""手写 Prompt 解析版 ReAct：Thought → Action → Observation；Skill 渐进披露。"""
 
 from __future__ import annotations
 
@@ -14,15 +14,14 @@ if str(_ROOT) not in sys.path:
 
 import src.common.config  # noqa: F401,E402
 from src.common.config import MAX_STEPS, REPEAT_ACTION_LIMIT, get_chat_client  # noqa: E402
-from src.tools import execute_tool  # noqa: E402
+from src.harness.tool_registry import call_tool, is_load_skill_success  # noqa: E402
 
-SYSTEM_PROMPT = """你是一名专业的 A 股金融分析助手，可以使用以下工具：
+SYSTEM_PROMPT = """你是一名专业的 A 股金融分析助手，运行在 Harness 约束内。
 
-1. company_lookup(name) - 公司中文名 → 6 位股票代码
-2. rag_search(query, stock_code?, year?, top_k?) - 年报语义检索（战略/风险/管理层讨论等定性内容）
-3. financial_indicator(symbol) - 近 3 年结构化财务指标（营收/毛利率/ROE 等）
-4. stock_price(symbol, start_date, end_date) - 历史股价，日期格式 YYYYMMDD
-5. calculator(expr) - 四则运算与幂运算（差值、增长率必须用它，禁止心算）
+初始只有元工具（业务工具必须先 load_skill 才能用）：
+1. list_skills() - 列出已发现技能（L0）
+2. load_skill(name) - 加载技能说明书（L1）并解锁该技能 tools.py 中的业务工具
+3. read_skill_resource(skill, path) - 读取技能目录内参考文件（L2），禁止 .. 穿越
 
 你必须严格按照以下格式交替输出，每次只能调用一个工具：
 
@@ -36,6 +35,7 @@ Thought: 已有足够信息
 Final Answer: 完整的回答（含数据来源）
 
 规则：
+- 必须先 load_skill，再调用该技能业务工具（未解锁会被拒绝）
 - 调用 financial_indicator 或 stock_price 之前，必须先用 company_lookup 获取股票代码
 - 数字计算必须用 calculator，不能心算
 - rag_search 的 query 用短财务术语，公司与年份尽量走 stock_code/year
@@ -45,7 +45,7 @@ Final Answer: 完整的回答（含数据来源）
 """
 
 _THOUGHT_RE = re.compile(r"Thought:\s*(.+?)(?=\nAction:|\nFinal Answer:|$)", re.DOTALL)
-_ACTION_RE = re.compile(r"Action:\s*(\w+)")
+_ACTION_RE = re.compile(r"Action:\s*([A-Za-z_][A-Za-z0-9_]*)")
 _ACTION_INPUT_RE = re.compile(r"Action Input:\s*(\{.+?\})", re.DOTALL)
 _FINAL_RE = re.compile(r"Final Answer:\s*(.+)", re.DOTALL)
 
@@ -92,17 +92,18 @@ def run(
     extra_system: str | None = None,
 ) -> Generator[dict, None, None]:
     """ReAct 循环，yield 每步 dict（action / final / error / max_steps）。"""
+    from src.agent.loop import compose_system_prompt
+
     client, model = get_chat_client(provider)
     steps = max_steps if max_steps is not None else MAX_STEPS
-    system = SYSTEM_PROMPT
-    if extra_system:
-        system = SYSTEM_PROMPT + "\n\n---\n\n" + extra_system
+    system = compose_system_prompt(SYSTEM_PROMPT, extra_system)
     messages = [
         {"role": "system", "content": system},
         {"role": "user", "content": question},
     ]
     last_sig = ""
     consecutive = 0
+    activated: set[str] = set()
 
     for step in range(1, steps + 1):
         response = client.chat.completions.create(
@@ -120,6 +121,7 @@ def run(
                 "type": "final",
                 "thought": parsed["thought"],
                 "answer": parsed["answer"],
+                "activated_skills": sorted(activated),
             }
             return
 
@@ -128,6 +130,7 @@ def run(
                 "step": step,
                 "type": "error",
                 "observation": f"格式解析失败，原始输出：{llm_output[:200]}",
+                "activated_skills": sorted(activated),
             }
             return
 
@@ -149,10 +152,21 @@ def run(
                 "observation": (
                     f"连续相同 Action 熔断：{tool_name}({json.dumps(tool_args, ensure_ascii=False)})"
                 ),
+                "activated_skills": sorted(activated),
             }
             return
 
-        _result, observation = execute_tool(tool_name, tool_args)
+        observation = call_tool(tool_name, tool_args, activated_skills=activated)
+        if tool_name == "load_skill":
+            skill_name = str(tool_args.get("name") or "").strip()
+            if skill_name and is_load_skill_success(observation, skill_name):
+                activated.add(skill_name)
+                observation = (
+                    observation
+                    + f"\n\n[system] 已解锁技能 `{skill_name}` 的业务工具；"
+                    "请在后续步骤中直接调用它们。"
+                )
+
         yield {
             "step": step,
             "type": "action",
@@ -160,6 +174,7 @@ def run(
             "action": tool_name,
             "action_input": tool_args,
             "observation": observation,
+            "activated_skills": sorted(activated),
         }
         messages.append({"role": "assistant", "content": llm_output})
         messages.append({"role": "user", "content": f"Observation: {observation}\n"})
@@ -168,4 +183,5 @@ def run(
         "step": steps + 1,
         "type": "max_steps",
         "answer": f"已达最大步数 {steps}，未能得出最终答案",
+        "activated_skills": sorted(activated),
     }

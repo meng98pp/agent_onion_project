@@ -1,4 +1,4 @@
-"""V5 统一入口：切换 manual / fc，打印逐步轨迹。不当上帝文件。"""
+"""V5/V7 统一入口：切换 manual / fc；L0 技能索引注入 system，L1 按需展开。"""
 
 from __future__ import annotations
 
@@ -14,6 +14,8 @@ if str(_ROOT) not in sys.path:
 
 import src.common.config  # noqa: F401,E402
 from src.common.config import CHAT_PROVIDERS, MAX_STEPS  # noqa: E402
+from src.harness.skill_loader import load_skill_index  # noqa: E402
+from src.harness.tool_registry import build_tools_prompt_section  # noqa: E402
 
 COLORS = {
     "thought": "\033[36m",
@@ -24,11 +26,19 @@ COLORS = {
     "reset": "\033[0m",
 }
 
-DEFAULT_QUESTION = "对比茅台与五粮液近三年毛利率，并计算差值"
+DEFAULT_QUESTION = "用股票分析技能解读宁德时代风险因素"
 
 
 def _c(color: str, text: str) -> str:
     return f"{COLORS[color]}{text}{COLORS['reset']}"
+
+
+def compose_system_prompt(base: str, extra_system: str | None = None) -> str:
+    """L0 索引进 system；SKILL 正文只在 load_skill 命中后进入 Observation。"""
+    parts = [base, build_tools_prompt_section()]
+    if extra_system:
+        parts.append(extra_system)
+    return "\n\n---\n\n".join(part for part in parts if part)
 
 
 def run_and_print(
@@ -45,9 +55,11 @@ def run_and_print(
         raise ValueError(f"未知 mode: {mode!r}，可选 manual / fc")
 
     steps_limit = max_steps if max_steps is not None else MAX_STEPS
+    skill_names = [row["name"] for row in load_skill_index()]
     print(f"\n{'=' * 60}")
     print(f"问题: {question}")
     print(f"实现: {'手写Prompt解析' if mode == 'manual' else 'Function Calling'}  mode={mode}")
+    print(f"Skill L0: {skill_names or '(空)'}")
     print("=" * 60)
 
     start = time.time()
@@ -89,7 +101,7 @@ def run_and_print(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="V5 ReAct 金融分析 Agent")
+    parser = argparse.ArgumentParser(description="V7 ReAct + Skill 渐进披露")
     parser.add_argument("--mode", choices=["manual", "fc"], default="fc")
     parser.add_argument("--q", "--question", dest="question", default=DEFAULT_QUESTION)
     parser.add_argument("--max-steps", type=int, default=None)

@@ -1,6 +1,6 @@
 # FinAgent Onion Learning
 
-单仓叠加的金融分析 Agent 学习工程。当前版本：**V6 四层记忆 + 七配置 + 压缩**。
+单仓叠加的金融分析 Agent 学习工程。当前版本：**V7 Skill 热拔插 + 渐进披露 + Harness**。
 
 ## 环境
 
@@ -111,11 +111,25 @@ python -c "from src.memory_sys.loader import load_base_prompt; assert len(load_b
 
 浏览器打开 `http://127.0.0.1:8013`：默认「记忆对话」；也可切回 V5 ReAct 轨迹（会把 USER/MEMORY 拼进 system prompt）。HEARTBEAT 默认开启调度器，示例任务 `enabled: false`。
 
+## V7 运行
+
+Skill 目录热加载：启动只把 `name/description` 当 L0 索引；`load_skill` 后再展开 SKILL 正文并解锁 `tools.py`。Harness = 停止条件 + 工具白名单 + 可观测（轨迹里带 `activated_skills`）。
+
+```powershell
+python -c "from src.harness.skill_loader import load_skill_index; print(load_skill_index())"
+python src\agent\loop.py --q "用股票分析技能解读宁德时代风险因素"
+python src\harness\mcp_server.py --smoke
+uvicorn src.agent.serve:app --port 8014
+```
+
+浏览器打开后可用 `GET /skills`、`POST /reload` 热拔插。新增 `skills/<name>/SKILL.md`（可选 `tools.py`）不改 agent 核心即可被发现。
+
 ## 测试
 
 ```powershell
-pytest tests\ingest\test_chunking.py tests\rag\test_retriever.py tests\rag\test_rrf.py tests\tools\test_calculator_sandbox.py tests\memory_sys\test_loader.py -q
+pytest tests\ingest\test_chunking.py tests\rag\test_retriever.py tests\rag\test_rrf.py tests\tools\test_calculator_sandbox.py tests\memory_sys\test_loader.py tests\harness\test_hot_reload.py -q
 python -c "from src.tools.rag_backend import rag_search; assert rag_search('测试')['ok'] in (True, False)"
 python -c "from src.memory_sys.loader import load_base_prompt; assert len(load_base_prompt())>0"
+python -c "from src.harness.skill_loader import load_skill_index; assert any(s['name']=='stock-analyst' for s in load_skill_index())"
 python -c "import json,glob; [print(p,len(json.load(open(p,encoding='utf-8')))) for p in glob.glob('data/chunks/*.json')]"
 ```
