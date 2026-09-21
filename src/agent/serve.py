@@ -24,7 +24,6 @@ from src.common.config import (  # noqa: E402
     MAX_STEPS,
     OPENAI_MODEL,
     STATIC_DIR,
-    get_chat_client,
 )
 from src.memory_sys.flush import MemoryFlusher  # noqa: E402
 from src.memory_sys.fts_store import FTSStore  # noqa: E402
@@ -177,7 +176,7 @@ async def query_fc(req: QueryRequest):
 
 @app.post("/chat")
 async def chat(req: ChatRequest):
-    """记忆对话：组装四层 Context → 流式 LLM → 写入 SQLite。"""
+    """记忆对话：组装四层 Context → ReAct 工具循环（可 load_skill）→ 写入 SQLite。"""
     assert db and loader and retriever and flusher
     sid = req.session_id or current_session_id
 
@@ -221,43 +220,43 @@ async def chat(req: ChatRequest):
             }
         )
 
-        api_messages = (
-            [{"role": "system", "content": system_prompt}]
-            + history_for_api
-            + [{"role": "user", "content": req.message}]
-        )
         queue: asyncio.Queue = asyncio.Queue()
+        sentinel = object()
 
         def _worker() -> None:
-            """流式调用聊天模型，按 token 写入队列。"""
+            """记忆 Context + V7 ReAct 工具循环（可自动 load_skill）。"""
+            from src.agent.react_fc import run as react_run
+
             try:
-                client, model = get_chat_client()
-                resp = client.chat.completions.create(
-                    model=model, messages=api_messages, temperature=0.4, stream=True
-                )
-                chunks: list[str] = []
-                for part in resp:
-                    delta = part.choices[0].delta.content or ""
-                    if delta:
-                        chunks.append(delta)
-                        queue.put_nowait(("token", delta))
-                queue.put_nowait(("complete", "".join(chunks)))
+                for step_data in react_run(
+                    req.message,
+                    extra_system=system_prompt or None,
+                    history=history_for_api,
+                ):
+                    queue.put_nowait(step_data)
             except Exception as exc:  # noqa: BLE001
-                queue.put_nowait(("error", str(exc)))
+                queue.put_nowait({"step": 0, "type": "error", "observation": f"循环异常：{exc}"})
+            finally:
+                queue.put_nowait(sentinel)
 
         asyncio.get_running_loop().run_in_executor(None, _worker)
         full_response = ""
         while True:
-            kind, payload = await queue.get()
-            if kind == "token":
-                yield _sse({"type": "token", "text": payload})
-            elif kind == "complete":
-                full_response = payload or "（模型返回空内容）"
+            step_data = await queue.get()
+            if step_data is sentinel:
                 break
-            else:
-                full_response = f"（生成失败：{payload}）"
-                yield _sse({"type": "error", "message": payload})
-                break
+            yield _sse(step_data)
+            if step_data.get("type") == "final":
+                full_response = step_data.get("answer") or "（模型返回空内容）"
+            elif step_data.get("type") in ("error", "max_steps"):
+                full_response = (
+                    step_data.get("answer")
+                    or step_data.get("observation")
+                    or "（循环失败）"
+                )
+
+        if not full_response:
+            full_response = "（未得到最终回答）"
 
         db.add_message(sid, "user", req.message)
         db.add_message(sid, "assistant", full_response)

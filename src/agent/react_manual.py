@@ -36,10 +36,13 @@ Final Answer: 完整的回答（含数据来源）
 
 规则：
 - 必须先 load_skill，再调用该技能业务工具（未解锁会被拒绝）
+- 用户问题匹配 L0 某技能时：立刻 Action: load_skill，禁止询问「是否启用」，禁止只口头描述
+- 问天气 → load_skill({"name":"weather-query"}) → query_weather({"city":"北京"})
+- 问财务/股价/年报 → load_skill({"name":"stock-analyst"})
 - 调用 financial_indicator 或 stock_price 之前，必须先用 company_lookup 获取股票代码
 - 数字计算必须用 calculator，不能心算
 - rag_search 的 query 用短财务术语，公司与年份尽量走 stock_code/year
-- Final Answer 必须引用具体数据来源（年报页码或 AkShare）
+- Final Answer 必须引用具体数据来源（年报页码、AkShare 或天气工具返回）
 - 知识库仅含贵州茅台/五粮液/宁德时代/海康威视/中国平安（2021–2025）
 - 没有合适工具能回答时，直接 Final Answer 说明原因，不要编造
 """
@@ -90,6 +93,7 @@ def run(
     max_steps: int | None = None,
     provider: str = "dashscope",
     extra_system: str | None = None,
+    history: list[dict] | None = None,
 ) -> Generator[dict, None, None]:
     """ReAct 循环，yield 每步 dict（action / final / error / max_steps）。"""
     from src.agent.loop import compose_system_prompt
@@ -97,10 +101,10 @@ def run(
     client, model = get_chat_client(provider)
     steps = max_steps if max_steps is not None else MAX_STEPS
     system = compose_system_prompt(SYSTEM_PROMPT, extra_system)
-    messages = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": question},
-    ]
+    messages: list[dict] = [{"role": "system", "content": system}]
+    if history:
+        messages.extend(history)
+    messages.append({"role": "user", "content": question})
     last_sig = ""
     consecutive = 0
     activated: set[str] = set()

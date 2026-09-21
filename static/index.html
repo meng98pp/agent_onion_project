@@ -115,8 +115,8 @@
 <body>
 <header>
   <div>
-    <h1>V6 Memory + ReAct Financial Agent</h1>
-    <div class="subtitle">四层记忆 · 七配置 · Flush 三写 · HEARTBEAT · 年报 ReAct</div>
+    <h1>V7 Skill Harness + Memory</h1>
+    <div class="subtitle">渐进披露 · 热拔插 · 四层记忆 · ReAct 工具循环</div>
   </div>
   <div>
     <button class="workspace-btn active" id="wsMemory" onclick="setWorkspace('memory')">记忆对话</button>
@@ -140,6 +140,7 @@
         <button class="send-btn" id="chatSendBtn" onclick="sendChat()">发送</button>
       </div>
       <div class="examples">
+        <span class="example-chip" onclick="setChat(this.textContent)">查一下北京的天气</span>
         <span class="example-chip" onclick="setChat(this.textContent)">我关注茅台和宁德时代，回答尽量给关键数字</span>
         <span class="example-chip" onclick="setChat(this.textContent)">请记住我更喜欢简洁结论，少客套</span>
         <span class="example-chip" onclick="setChat(this.textContent)">/flush</span>
@@ -168,8 +169,8 @@
   <div class="input-card">
     <div class="mode-toggle">
       <span style="font-size:13px;color:#64748b;margin-right:4px;">实现方式：</span>
-      <button class="mode-btn active" data-mode="manual" onclick="setMode('manual',this)">手写 Prompt 解析</button>
-      <button class="mode-btn" data-mode="fc" onclick="setMode('fc',this)">Function Calling</button>
+      <button class="mode-btn" data-mode="manual" onclick="setMode('manual',this)">手写 Prompt 解析</button>
+      <button class="mode-btn active" data-mode="fc" onclick="setMode('fc',this)">Function Calling</button>
     </div>
     <div class="input-row">
       <textarea id="question" placeholder="例如：对比茅台与五粮液近三年毛利率，并计算差值"></textarea>
@@ -191,7 +192,7 @@
 </div>
 
 <script>
-  let currentMode = 'manual';
+  let currentMode = 'fc';
   let isRunning = false;
   let chatRunning = false;
   let assistantBubble = null;
@@ -391,13 +392,23 @@
         return '<div class="hit"><div class="title">[' + esc(hit.category) + '] ' + esc(hit.title) +
           '</div>' + esc(hit.content) + '<div>' + (hit.score * 100).toFixed(0) + '% · ' + esc(hit.source) + '</div></div>';
       }).join('') : '无命中';
+    } else if (data.type === 'action' && assistantBubble) {
+      const args = JSON.stringify(data.action_input || {}, null, 0);
+      assistantBubble.textContent += '→ ' + (data.action || '') + ' ' + args + '\n';
+      assistantBubble.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    } else if (data.type === 'final' && assistantBubble) {
+      if (assistantBubble.textContent) assistantBubble.textContent += '\n';
+      assistantBubble.textContent += data.answer || '';
+      assistantBubble.scrollIntoView({ behavior: 'smooth', block: 'end' });
     } else if (data.type === 'token' && assistantBubble) {
       assistantBubble.textContent += data.text || '';
       assistantBubble.scrollIntoView({ behavior: 'smooth', block: 'end' });
     } else if (data.type === 'done' && assistantBubble && !assistantBubble.textContent) {
       assistantBubble.textContent = data.response || '';
     } else if (data.type === 'error' && assistantBubble) {
-      assistantBubble.textContent = data.message || assistantBubble.textContent;
+      assistantBubble.textContent = data.message || data.observation || assistantBubble.textContent;
+    } else if (data.type === 'max_steps' && assistantBubble) {
+      assistantBubble.textContent += '\n' + (data.answer || '已达最大步数');
     }
   }
   function handleFlushEvent(data) {

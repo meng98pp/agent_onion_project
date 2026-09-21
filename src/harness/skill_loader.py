@@ -276,7 +276,8 @@ class SkillLoader:
         lines = [
             "## 可用技能（L0 目录 — 渐进式披露）",
             "此处**只有**技能名与简介；业务工具 Schema **默认不在** tools 列表中。",
-            "流程：`load_skill(name)` → 获得说明书并解锁该技能工具 → 再调用；",
+            "流程：匹配到技能后**立刻** `load_skill(name)` → 获得说明书并解锁工具 → 再调用业务工具。",
+            "禁止向用户询问是否启用技能；load_skill 由你自己调用，不是让用户执行的命令。",
             "L2 细节用 `read_skill_resource`。元工具始终可用：`list_skills` / `load_skill` / `read_skill_resource`。",
             "",
         ]
